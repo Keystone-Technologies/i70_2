@@ -6,17 +6,19 @@ use 5.014;
 no strict 'refs';
 
 use DBI;
+use Data::Dumper;
+#use Data::Compare;
+use Hash::Merge qw( merge );
+use List::MoreUtils qw( uniq );
 use Mojo::JSON 'j';
-use Mojo::IOLoop;
 use Mojo::UserAgent;
 
+Hash::Merge::set_behavior('RETAINMENT_PRECEDENT');
 my $db = "http://burfarationsessalindsomm:ECxBSE6eKmui8UwVqSJ42AMR\@s1037989.cloudant.com/i70";
 my $ua = Mojo::UserAgent->new;
 my %dbh = map { $_ => DBI->connect("dbi:mysql:emr_$_;host=kit-i70$_", 'i70', 'i70') } ('a'..'d');
 
 &{$_}($dbh{$_}) foreach keys %dbh;
-
-#Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 
 sub a { sync(a => shift->prepare("SELECT height,nationality,md5(concat(patients.ssn, dob)) as deid FROM patients LEFT JOIN vitals USING (ssn)")) }
 sub b { sync(b => shift->prepare("SELECT weight,nationality,md5(concat(patients.ssn, dob)) as deid FROM patients LEFT JOIN vitals USING (ssn)")) }
@@ -27,27 +29,41 @@ sub sync {
   my ($dbh, $sth) = @_;
   $sth->execute;
   while ( my $row = $sth->fetchrow_hashref ) {
+    my $deid = delete $row->{deid};
     delete $row->{$_} foreach grep { exists $row->{$_} } qw/id rev/;
-    my $tx = $ua->get("$db/$row->{deid}");
+    $row = {map { $_ => [$row->{$_}] } keys %$row};
+    my $tx = $ua->get("$db/$deid");
     my $res = $tx->res->json;
     if ( $res->{error} ) {
       if ( $res->{error} eq 'not_found' ) {
-        say "Creating $dbh/$row->{deid}...";
-        my $tx = $ua->put("$db/$row->{deid}" => json => $row);
+        say "Creating $dbh/$deid...";
+        my $tx = $ua->put("$db/$deid" => json => $row);
         say j($tx->res->json);
       }
     } else {
       #say "$_\t$row->{$_}\t$res->{$_}" foreach keys $row;
-      if ( grep { ! exists $res->{$_} || $res->{$_} ne $row->{$_} } keys %$row ) { # This does not compare a json structure, just a string value but this should not be a problem with an RDBMS
-        say "Updating $dbh/$row->{deid}/$res->{_rev}...";
-        $row->{_rev} = $res->{_rev};
-        my $tx = $ua->put("$db/$row->{deid}" => json => {%$res, %$row});
-        say j($tx->res->json);
+      if ( Compare({map { $_ => $res->{$_} } keys %$row}, $row) ) {
+        say "$deid already up to date";
       } else {
-        say "$row->{deid} already up to date";
+        say "Updating $dbh/$deid/$res->{_rev}...";
+        #say Dumper({map { $_ => $res->{$_} } keys %$row}, $row);
+        #$row->{_rev} = $res->{_rev};
+        my $merge = merge($res, $row);
+        $merge->{$_} = [uniq @{$merge->{$_}}] foreach grep { ref $merge->{$_} eq 'ARRAY' } keys %$merge;
+        my $tx = $ua->put("$db/$deid" => json => $merge);
+        say j($tx->res->json);
       }
     }
   }
+}
+
+sub Compare {
+  my ($h1, $h2) = @_;
+  #say Dumper($h1, $h2);
+  foreach my $k2 ( keys %$h2 ) {
+    return 0 if not grep { $_ eq $h2->{$k2}->[0] } @{$h1->{$k2}};
+  }
+  return 1;
 }
 
 sub AUTOLOAD {
