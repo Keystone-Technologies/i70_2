@@ -7,64 +7,83 @@ no strict 'refs';
 
 use DBI;
 use Data::Dumper;
-#use Data::Compare;
+use Data::Compare;
 use Hash::Merge qw( merge );
 use List::MoreUtils qw( uniq );
 use Mojo::JSON 'j';
 use Mojo::UserAgent;
 
-Hash::Merge::set_behavior('RETAINMENT_PRECEDENT');
-my $db = "http://burfarationsessalindsomm:ECxBSE6eKmui8UwVqSJ42AMR\@s1037989.cloudant.com/i70";
+Hash::Merge::set_behavior('RIGHT_PRECEDENT');
+my $couchdb = "http://burfarationsessalindsomm:ECxBSE6eKmui8UwVqSJ42AMR\@s1037989.cloudant.com/i70";
 my $ua = Mojo::UserAgent->new;
-my %dbh = map { $_ => DBI->connect("dbi:mysql:emr_$_;host=kit-i70$_", 'i70', 'i70') } ('a'..'d');
 
-&{$_}($dbh{$_}) foreach keys %dbh;
+my %dbh = (
+  a => [
+    DBI->connect("dbi:mysql:sql228584;host=sql2.freemysqlhosting.net", 'sql228584', 'rF5*eP5%'),
+    "SELECT height,nationality,md5(concat(patients.ssn, dob)) as deid FROM emra_patients patients LEFT JOIN emra_vitals vitals USING (ssn) ORDER BY RAND()",
+  ],
+  b => [
+    DBI->connect("dbi:mysql:sql228584;host=sql2.freemysqlhosting.net", 'sql228584', 'rF5*eP5%'),
+    "SELECT weight,nationality,md5(concat(patients.ssn, dob)) as deid FROM emrb_patients patients LEFT JOIN emrb_vitals vitals USING (ssn) ORDER BY RAND()",
+  ],
+  c => [
+    DBI->connect("dbi:mysql:sql228584;host=sql2.freemysqlhosting.net", 'sql228584', 'rF5*eP5%'),
+    "SELECT height,ethnicity,md5(concat(patients.ssn, dob)) as deid FROM emrc_patients patients LEFT JOIN emrc_vitals vitals USING (ssn) ORDER BY RAND()",
+  ],
+  d => [
+    DBI->connect("dbi:mysql:sql228584;host=sql2.freemysqlhosting.net", 'sql228584', 'rF5*eP5%'),
+    "SELECT weight,ethnicity,md5(concat(patients.ssn, dob)) as deid FROM emrd_patients patients LEFT JOIN emrd_vitals vitals USING (ssn) ORDER BY RAND()",
+    "SELECT ethnicity,household_income,md5(concat(patients.ssn, dob)) as deid FROM emrd_patients patients ORDER BY RAND()",
+  ],
+);
 
-sub a { sync(a => shift->prepare("SELECT height,nationality,md5(concat(patients.ssn, dob)) as deid FROM patients LEFT JOIN vitals USING (ssn)")) }
-sub b { sync(b => shift->prepare("SELECT weight,nationality,md5(concat(patients.ssn, dob)) as deid FROM patients LEFT JOIN vitals USING (ssn)")) }
-sub c { sync(c => shift->prepare("SELECT height,ethnicity,md5(concat(patients.ssn, dob)) as deid FROM patients LEFT JOIN vitals USING (ssn)")) }
-sub d { sync(d => shift->prepare("SELECT weight,ethnicity,md5(concat(patients.ssn, dob)) as deid FROM patients LEFT JOIN vitals USING (ssn)")) }
+sync($_, @{$dbh{$_}}) foreach keys %dbh;
 
 sub sync {
-  my ($dbh, $sth) = @_;
-  $sth->execute;
-  while ( my $row = $sth->fetchrow_hashref ) {
-    my $deid = delete $row->{deid};
-    delete $row->{$_} foreach grep { exists $row->{$_} } qw/id rev/;
-    $row = {map { $_ => [$row->{$_}] } keys %$row};
-    my $tx = $ua->get("$db/$deid");
-    my $res = $tx->res->json;
-    if ( $res->{error} ) {
-      if ( $res->{error} eq 'not_found' ) {
-        say "Creating $dbh/$deid...";
-        my $tx = $ua->put("$db/$deid" => json => $row);
-        say j($tx->res->json);
-      }
-    } else {
-      #say "$_\t$row->{$_}\t$res->{$_}" foreach keys $row;
-      if ( Compare({map { $_ => $res->{$_} } keys %$row}, $row) ) {
-        say "$deid already up to date";
+  my ($name, $dbh, @sql) = @_;
+  say "DB Name: $name";
+  foreach my $sql ( @sql ) {
+    my $sth = $dbh->prepare($sql);
+    $sth->execute;
+    while ( my $row = $sth->fetchrow_hashref ) {
+      my $deid = delete $row->{deid};
+      delete $row->{$_} foreach grep { exists $row->{$_} } qw/id rev/;
+      $row = {map { $_ => {$name => $row->{$_}} } keys %$row};
+      my $tx = $ua->get("$couchdb/$deid");
+      my $res = $tx->res->json;
+      if ( $res->{error} ) {
+        if ( $res->{error} eq 'not_found' ) {
+          say "Creating $name/$deid...";
+          my $tx = $ua->put("$couchdb/$deid" => json => $row);
+          say j($tx->res->json);
+        }
       } else {
-        say "Updating $dbh/$deid/$res->{_rev}...";
-        #say Dumper({map { $_ => $res->{$_} } keys %$row}, $row);
-        #$row->{_rev} = $res->{_rev};
-        my $merge = merge($res, $row);
-        $merge->{$_} = [uniq @{$merge->{$_}}] foreach grep { ref $merge->{$_} eq 'ARRAY' } keys %$merge;
-        my $tx = $ua->put("$db/$deid" => json => $merge);
-        say j($tx->res->json);
+        #say "$_\t$row->{$_}\t$res->{$_}" foreach keys $row;
+        my $oldrow = {map { $_ => {$name => $res->{$_}->{$name}} } keys %$row};
+        if ( Compare($oldrow, $row) ) {
+          say "$deid already up to date";
+        } else {
+          say "Updating $name/$deid/$res->{_rev}...";
+          #say Dumper($oldrow, $row);
+          #$row->{_rev} = $res->{_rev};
+          my $merge = merge($res, $row);
+          #$merge->{$_} = [uniq @{$merge->{$_}}] foreach grep { ref $merge->{$_} eq 'ARRAY' } keys %$merge;
+          my $tx = $ua->put("$couchdb/$deid" => json => $merge);
+          say j($tx->res->json);
+        }
       }
     }
   }
 }
 
-sub Compare {
-  my ($h1, $h2) = @_;
-  #say Dumper($h1, $h2);
-  foreach my $k2 ( keys %$h2 ) {
-    return 0 if not grep { $_ eq $h2->{$k2}->[0] } @{$h1->{$k2}};
-  }
-  return 1;
-}
+#sub Compare {
+#  my ($h1, $h2) = @_;
+#  #say Dumper($h1, $h2);
+#  foreach my $k2 ( keys %$h2 ) {
+#    return 0 if not grep { $_ eq $h2->{$k2}->[0] } @{$h1->{$k2}};
+#  }
+#  return 1;
+#}
 
 sub AUTOLOAD {
   my $program = $::AUTOLOAD;
