@@ -1,151 +1,27 @@
-#!/usr/bin/env perl
+#!/usr/bin/perl
 use Mojolicious::Lite;
 
-# Documentation browser under "/perldoc"
-plugin 'PODRenderer';
+use lib 'lib';
 
-my $data = [ map {
-{
-  recId => $_,
-  company => scalar localtime,
-  contact => scalar localtime,
-  title => scalar localtime,
-  address => scalar localtime,
+plugin 'PQGridCrud';
+plugin 'RESTRoutes';
+my $r = app->routes;
+for ('a'..'d') {
+  my $emr = $r->under("/emr_$_");
+  $emr->route('/patients')->to("Emr\u${_}::Patients")->get->to("#index");
+  $emr->rest_routes(name => 'patients', controller => "Emr\u${_}::Patients");
+  $emr->route('/vitals')->to("Emr\u${_}::Vitals")->get->to("#index");
+  $emr->rest_routes(name => 'vitals', controller => "Emr\u${_}::Vitals");
 }
-} (1..20)];
-
-# Make pqGridCrud RESTful
-hook before_dispatch => sub {
-  my $c = shift;
-  if ( my $id = $c->req->url->query->param('deleteId') ) {
-    $c->req->method('DELETE');
-    $c->req->url->path(join '/', $c->req->url->path, $id);
-    #$c->app->log->info($c->req->url->path);
-  }
-  if ( defined $c->req->url->query->param('recId') ) {
-    my $id = $c->req->url->query->param('recId');
-    if ( $id ) {
-      $c->req->method('POST');
-      $c->req->url->path(join '/', $c->req->url->path, $id);
-    } else {
-      $c->req->method('PUT');
-    }
-  }
-  #$c->app->log->info($c->req->url->to_string);
-};
 
 get '/' => sub {
   my $self = shift;
   $self->render('index');
 };
 
-post '/crud/:id' => sub {
-  my $self = shift;
-  $self->render(json => {data => $data});# if $self->accepts('json');
-};
-
-del '/crud/:id' => sub {
-  my $self = shift;
-  splice(@$data, $self->param('id'), 1);
-  $self->render(json => {data => $data});# if $self->accepts('json');
-};
-
-put '/crud' => sub {
-  my $self = shift;
-  $self->render(json => {data => $data});# if $self->accepts('json');
-};
-
-get '/crud' => sub {
-  my $self = shift;
-  $self->render(json => {data => $data}) if $self->accepts('json');
-};
 
 app->start;
+
 __DATA__
-
 @@ index.html.ep
-% layout 'default';
-% title 'Welcome';
-Welcome to the Mojolicious real-time web framework!
-
-@@ layouts/default.html.ep
-<!DOCTYPE html>
-<html>
-  <head>
-    <title><%= title %></title>
-    <!--jQuery dependencies-->
-    <link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.9.2/themes/base/jquery-ui.css" />
-    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>    
-    <script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.9.2/jquery-ui.min.js"></script>
-   
-    <style>
-        .pq-grid-crud-popup *
-        {
-            font-family:Tahoma;
-            font-size:11px;        
-        }
-        .pq-grid-crud-popup form.pq-grid-crud-form
-        {
-            margin-top:10px;
-        }
-        .pq-grid-crud-popup form.pq-grid-crud-form input
-        {
-            width:300px;
-            overflow:visible;/*fix for IE*/
-        }
-        .pq-grid-crud-popup form.pq-grid-crud-form td.label
-        {
-            font-weight:bold;padding-right:5px;
-        }
-        div.pq-grid-toolbar-crud-remote
-        {
-            text-align:center;
-        }
-    </style>
-    <!--ParamQuery Grid files-->
-    <link rel="stylesheet" href="/pqgrid.dev.css" />
-    <script type="text/javascript" src="/pqgrid.dev.js" ></script>   
-    <script type="text/javascript" src="/pqGridCrud.js" ></script>   
-    <script>
-        $(function () {
-            var colM = [
-            { title: "Company Name", width: 190, dataIndx: "company" },
-            { title: "Contact Name", width: 160, dataIndx: "contact" },
-            { title: "Contact Title", width: 160, dataIndx: "title" },
-            { title: "Address", width: "190", dataIndx: "address" }
-            ];
-            var dataModel = {
-                location: "remote",
-                sorting: "local",
-                paging: "local",
-                dataType: "JSON",
-                method: "GET",
-                sortIndx: "contact",
-                sortDir: "up",
-                url: "/crud", //custom field in dataModel for pqGridCrud
-                getData: function (dataJSON) {
-                    var data = dataJSON.data;
-                    return { data: dataJSON.data };
-                }
-            }
-            var newObj = {
-                flexHeight: true,
-                flexWidth: true,
-                dataModel: dataModel,
-                bottomVisible: true,
-                colModel: colM,
-                selectionModel: { mode: 'single' },
-                editable: false,
-                scrollModel: { horizontal: false },
-                title: "Contact Details",
-                columnBorders: true
-            };
-            var $grid = $("#grid_crud-remote").pqGridCrud(newObj);
-        });
-    </script>    
-  </head>
-  <body>
-    <%= content %>
-    <div id="grid_crud-remote"></div>
-  </body>
-</html>
+hi
