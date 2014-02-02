@@ -3,8 +3,27 @@ use Mojolicious::Lite;
 
 use lib 'lib';
 
+use EV;
+use DBIx::Custom;
+
 plugin 'PQGridCrud';
 plugin 'RESTRoutes';
+
+our $dbh;
+helper dbh => sub {
+  my $self = shift;
+  return $dbh if $dbh;
+  $self->app->log->info("DBIx::Custom connecting...");
+  $dbh = DBIx::Custom->connect(dsn => 'dbi:mysql:sql228584;host=54.247.107.148',user=>'sql228584',password=>'rF5*eP5%',connector=>1);
+  $self->app->log->info("DBIx::Custom connected");
+  $dbh->async_conf({
+    prepare_attr => {async => 1},
+    fh => sub { shift->dbh->mysql_fd }
+  });
+  $dbh;
+};
+app->dbh;
+
 my $r = app->routes;
 for ('a'..'d') {
   my $emr = $r->under("/emr_$_");

@@ -1,16 +1,38 @@
 package EmrA::Patients;
 use Mojo::Base 'EmrA';
 
-has 'dbh' => sub { [ map {
-  {
-    recId => $_,
-    company => scalar localtime,
-    contact => scalar localtime,
-    title => scalar localtime,
-    address => scalar localtime,
-  } } (1..20)]
-};
+#sub rest_list {
+#  my $self = shift;
+#  $self->render(json => {data => $self->dbh->selectall_arrayref("SELECT * FROM emra_patients patients")});
+#}
 
+sub rest_list { shift->SUPER::rest_list('* FROM emra_patients patients') }
+
+sub rest_create {  
+  my $self = shift;
+  $self->render(text => 'Create: '.scalar localtime);
+}
+ 
+sub rest_show {
+  my $self = shift;
+  my ($id) = $self->param('patientsid');
+  $self->render(text => "Show $id: ".scalar localtime);
+}
+ 
+sub rest_remove {  
+  my $self = shift;
+  my ($id) = $self->param('patientsid');
+  my $data = $self->dbh; 
+  splice(@$data, $id, 1);
+  $self->render(json => {data => $data});
+}
+ 
+sub rest_update {  
+  my $self = shift;
+  my ($id) = $self->param('patientsid');
+  $self->render(text => "Update $id: ".scalar localtime);
+}
+ 
 1;
 
 __DATA__
@@ -18,8 +40,9 @@ __DATA__
 % layout 'pqgrid', url => "/emr_a/patient";
 % title 'Patients';
 % content_for 'colM' => begin
-  { title: "Company Name", width: 190, dataIndx: "company" },
-  { title: "Contact Name", width: 160, dataIndx: "contact" },
-  { title: "Contact Title", width: 160, dataIndx: "title" },
-  { title: "Address", width: "190", dataIndx: "address" }
+  { title: "ID", width: 190 },
+  { title: "Name", width: 160 },
+  { title: "SSN", width: 160 },
+  { title: "DoB", width: 190 },
+  { title: "Nationality", width: 190 }
 % end

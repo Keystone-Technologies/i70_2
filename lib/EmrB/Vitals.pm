@@ -1,29 +1,46 @@
 package EmrB::Vitals;
 use Mojo::Base 'EmrB';
 
-has 'dbh' => sub { [ map {
-  {
-    recId => $_,
-    v1 => scalar localtime,
-    v2 => int(rand(100)+1),
-    v3 => scalar localtime,
-    v4 => int(rand(100)+1),
-    v5 => scalar localtime,
-    v6 => int(rand(100)+1),
-  } } (15..20)]
-};
+#sub rest_list {
+#  my $self = shift;
+#  $self->render(json => {data => $self->dbh->selectall_arrayref("SELECT * FROM emra_patients patients")});
+#}
 
+sub rest_list { shift->SUPER::rest_list('* FROM emrb_vitals vitals') }
+
+sub rest_create {  
+  my $self = shift;
+  $self->render(text => 'Create: '.scalar localtime);
+}
+ 
+sub rest_show {
+  my $self = shift;
+  my ($id) = $self->param('patientsid');
+  $self->render(text => "Show $id: ".scalar localtime);
+}
+ 
+sub rest_remove {  
+  my $self = shift;
+  my ($id) = $self->param('patientsid');
+  my $data = $self->dbh; 
+  splice(@$data, $id, 1);
+  $self->render(json => {data => $data});
+}
+ 
+sub rest_update {  
+  my $self = shift;
+  my ($id) = $self->param('patientsid');
+  $self->render(text => "Update $id: ".scalar localtime);
+}
+ 
 1;
 
 __DATA__
 @@ vitals/index.html.ep
-% layout 'pqgrid', url => "/emr_b/vital";
+% layout 'pqgrid', url => "/emr_b/vitals";
 % title 'Vitals';
 % content_for 'colM' => begin
-  { title: "Vital 1", width: 190, dataIndx: "v1" },
-  { title: "Vital 2", width: 160, dataIndx: "v2" },
-  { title: "Vital 3", width: 160, dataIndx: "v3" },
-  { title: "Vital 4", width: 190, dataIndx: "v4" },
-  { title: "Vital 5", width: 160, dataIndx: "v5" },
-  { title: "Vital 6", width: 190, dataIndx: "v6" }
+  { title: "ID", width: 190 },
+  { title: "SSN", width: 160 },
+  { title: "Height", width: 190 },
 % end

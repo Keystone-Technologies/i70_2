@@ -1,16 +1,15 @@
 package Emr;
 use Mojo::Base 'Mojolicious::Controller';
 
-use DBI;
-
-our $dbi;
-
-has dbh => sub { $dbi ||= DBI->connect("dbi:mysql:sql228584;host=sql2.freemysqlhosting.net", 'sql228584', 'rF5*eP5%') };
 
 sub rest_list {
   my $self = shift;
-  #$self->render(json => {data => [values(%{$self->dbh->selectall_hashref("SELECT * FROM emra_patients patients", 'id')})]});
-  $self->render(json => {data => $self->dbh});
+  my $sql = shift;
+  $self->render_later;
+  $self->dbh->select($sql, async => sub {
+    my ($dbi, $result) = @_;
+    $self->render(json => {data => $result->fetch_all});
+  });
 }
 
 sub rest_create {
